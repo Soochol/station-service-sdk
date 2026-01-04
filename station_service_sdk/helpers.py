@@ -138,6 +138,7 @@ def collect_steps(
             retry=step.retry,
             cleanup=step.cleanup,
             description=step.description,
+            display_name=step.display_name,
         )
         result.append((step.name, step.method, step_meta))
 
