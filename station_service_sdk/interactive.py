@@ -233,9 +233,16 @@ class InteractiveSimulator:
         # Build step states from manifest/class
         steps = collect_steps(sequence_class, manifest)
         for method_name, method, step_meta in steps:
+            # Use manifest display_name if provided, otherwise auto-generate
+            step_name = step_meta.name or method_name
+            if step_meta.display_name and step_meta.display_name != step_name:
+                step_display_name = step_meta.display_name
+            else:
+                step_display_name = step_name.replace("_", " ").title()
+
             session.steps.append(StepState(
-                name=step_meta.name or method_name,
-                display_name=(step_meta.name or method_name).replace("_", " ").title(),
+                name=step_name,
+                display_name=step_display_name,
                 order=step_meta.order,
             ))
 
