@@ -51,6 +51,40 @@ if __name__ == "__main__":
 
 ---
 
+## Lifecycle Steps
+
+SDK는 `setup()`과 `teardown()`을 자동으로 UI 스텝으로 emit합니다.
+
+### 동작 방식
+- `setup()` 시작 시 자동으로 step 1로 emit
+- `run()` 스텝들은 step 2부터 시작
+- `teardown()` 완료 시 마지막 step으로 emit
+- **총 스텝 수 = run 스텝 수 + 2** (setup + teardown)
+
+### manifest.yaml에 lifecycle 스텝 정의
+
+```yaml
+steps:
+  - name: setup
+    display_name: "Setup"
+    order: 0
+    lifecycle: true  # SDK 자동 관리
+  - name: init
+    display_name: "초기화"
+    order: 1
+  - name: measure
+    display_name: "측정"
+    order: 2
+  - name: teardown
+    display_name: "Teardown"
+    order: 3
+    lifecycle: true  # SDK 자동 관리
+```
+
+> `lifecycle: true` 스텝은 직접 emit하지 않아도 SDK가 자동 처리합니다.
+
+---
+
 ## emit_* 메서드
 
 시퀀스 실행 중 상태를 보고하는 메서드들입니다.
@@ -163,6 +197,56 @@ async def setup(self) -> None:
 
 ---
 
+## 실패 시 중단 (stop_on_failure)
+
+스텝 실패 시 즉시 시퀀스를 중단하려면:
+
+### manifest.yaml
+
+```yaml
+parameters:
+  stop_on_failure:
+    display_name: "실패 시 중단"
+    type: boolean
+    default: true
+    description: "스텝 실패 시 즉시 시퀀스 중단"
+```
+
+### sequence.py
+
+```python
+def __init__(self, ...):
+    super().__init__(...)
+    self.stop_on_failure = self.get_parameter("stop_on_failure", True)
+
+async def run(self) -> RunResult:
+    measurements = {}
+
+    # Step 1
+    try:
+        self.emit_step_start("init", 1, 2, "초기화")
+        # ... 로직
+        self.emit_step_complete("init", 1, True, 1.0)
+    except Exception as e:
+        self.emit_step_complete("init", 1, False, 1.0, error=str(e))
+        if self.stop_on_failure:
+            return {"passed": False, "measurements": measurements,
+                    "data": {"stopped_at": "init"}}
+
+    # Step 2 (stop_on_failure=True면 여기까지 오지 않음)
+    ...
+```
+
+---
+
+## UI 스텝 표시
+
+- manifest.yaml의 `steps` 정의가 UI에 placeholder로 표시됨
+- 실제 실행 시 emit된 스텝 결과가 overlay됨
+- SETUP_ERROR 발생 시에도 모든 스텝이 보임 (실행 안된 스텝은 pending 상태)
+
+---
+
 ## 유틸리티 메서드
 
 ```python
@@ -243,3 +327,5 @@ async def run(self) -> RunResult:
 - [ ] 측정값에 `emit_measurement` 사용
 - [ ] 예외 발생 시 SDK 예외 클래스 사용
 - [ ] `check_abort()` 호출로 중단 요청 처리
+- [ ] manifest.yaml에 setup/teardown 스텝 정의 (`lifecycle: true`)
+- [ ] `stop_on_failure` 파라미터로 실패 시 동작 제어
