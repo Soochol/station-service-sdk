@@ -28,9 +28,16 @@ class Measurement:
     - sequence_complete measurements
 
     Usage:
+        # Numeric with limits (auto-calculated pass/fail)
         m = Measurement(name="voltage", value=3.3, unit="V", min_value=3.0, max_value=3.6)
-        m.passed  # True (auto-calculated if limits provided)
-        m.to_dict()  # {"name": "voltage", "value": 3.3, ...}
+        m.passed  # True (auto-calculated)
+
+        # Boolean value
+        m = Measurement(name="connected", value=True)
+        m.passed  # True (boolean values auto-set passed to their value)
+
+        # String value (must set passed explicitly)
+        m = Measurement(name="serial", value="ABC123", passed=True)
     """
 
     name: str
@@ -43,14 +50,41 @@ class Measurement:
     timestamp: Optional[datetime] = field(default_factory=datetime.now)
 
     def __post_init__(self):
-        """Auto-calculate passed if limits provided and passed not set."""
-        if self.passed is None and isinstance(self.value, (int, float)):
-            if self.min_value is not None and self.max_value is not None:
-                self.passed = self.min_value <= self.value <= self.max_value
-            elif self.min_value is not None:
-                self.passed = self.value >= self.min_value
-            elif self.max_value is not None:
-                self.passed = self.value <= self.max_value
+        """
+        Auto-calculate passed based on value type and limits.
+
+        - Numeric values: Compare against min/max limits if provided
+        - Boolean values: passed = value (True means passed, False means failed)
+        - String values: Cannot auto-calculate, requires explicit passed value
+        - Limits on non-numeric values: Ignored with warning logged
+        """
+        import logging
+
+        # Validate limits are only used with numeric values
+        has_limits = self.min_value is not None or self.max_value is not None
+        is_numeric = isinstance(self.value, (int, float)) and not isinstance(self.value, bool)
+
+        if has_limits and not is_numeric:
+            logging.warning(
+                f"Measurement '{self.name}': min/max limits ignored for "
+                f"non-numeric value of type {type(self.value).__name__}"
+            )
+
+        # Auto-calculate passed if not explicitly set
+        if self.passed is None:
+            if is_numeric:
+                # Numeric: compare against limits
+                if self.min_value is not None and self.max_value is not None:
+                    self.passed = self.min_value <= self.value <= self.max_value
+                elif self.min_value is not None:
+                    self.passed = self.value >= self.min_value
+                elif self.max_value is not None:
+                    self.passed = self.value <= self.max_value
+                # No limits: leave passed as None (unknown)
+            elif isinstance(self.value, bool):
+                # Boolean: passed equals the value
+                self.passed = self.value
+            # String: leave passed as None (must be set explicitly)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization (protocol output)."""
@@ -82,9 +116,12 @@ class Measurement:
     @classmethod
     def from_dict(cls, name: str, data: Dict[str, Any]) -> "Measurement":
         """Create Measurement from dictionary."""
+        value = data.get("value")
+        if value is None:
+            value = 0  # Default value if not provided
         return cls(
             name=name,
-            value=data.get("value"),
+            value=value,
             unit=data.get("unit", ""),
             passed=data.get("passed"),
             min_value=data.get("min"),

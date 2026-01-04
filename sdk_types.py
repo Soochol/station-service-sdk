@@ -10,9 +10,53 @@ Usage:
     from station_service.sdk.types import RunResult, StepMeta, MeasurementDict
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypedDict, Union
+
+
+# =============================================================================
+# Enums for Type Safety (eliminating magic strings)
+# =============================================================================
+
+
+class ExecutionPhase(str, Enum):
+    """Execution lifecycle phases for type-safe status tracking."""
+
+    IDLE = "idle"
+    SETUP = "setup"
+    RUNNING = "running"
+    TEARDOWN = "teardown"
+    PAUSED = "paused"
+    WAITING = "waiting"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    ABORTED = "aborted"
+
+
+class LogLevel(str, Enum):
+    """Log levels for type-safe logging."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class SimulationStatus(str, Enum):
+    """Simulation result status values."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class InputType(str, Enum):
+    """Input request types for user interaction."""
+
+    CONFIRM = "confirm"
+    TEXT = "text"
+    NUMBER = "number"
+    SELECT = "select"
 
 
 # =============================================================================

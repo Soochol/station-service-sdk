@@ -6,7 +6,7 @@ Provides Protocol classes for dependency injection and custom implementations:
 - LifecycleHook: Lifecycle event handlers
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -121,6 +121,14 @@ class OutputStrategy(Protocol):
         timeout: Optional[float] = None,
     ) -> None:
         """Request user input."""
+        ...
+
+    def wait_for_input(
+        self,
+        request_id: str,
+        timeout: float = 300,
+    ) -> Any:
+        """Wait for user input response."""
         ...
 
 

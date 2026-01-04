@@ -35,7 +35,7 @@ def init_skills(target_dir: Path | None = None, force: bool = False) -> bool:
     skill_file = skills_source / "SKILL.md"
     
     if not skill_file.exists():
-        print(f"Error: SKILL.md not found in package", file=sys.stderr)
+        print("Error: SKILL.md not found in package", file=sys.stderr)
         return False
     
     # Create target directory

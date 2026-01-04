@@ -306,32 +306,52 @@ class OutputProtocol:
         """
         Wait for input response from stdin.
 
+        Uses selectors module for cross-platform compatibility (works on Windows, Linux, macOS).
+
         Args:
             request_id: The request ID to wait for
             timeout: Timeout in seconds
 
         Returns:
             The input value from user
+
+        Raises:
+            SequenceTimeoutError: If timeout is reached before receiving valid input
         """
-        import select
+        import selectors
 
-        # Wait for input with timeout
-        start_time = datetime.now()
-        while True:
-            elapsed = (datetime.now() - start_time).total_seconds()
-            if elapsed > timeout:
-                raise SDKTimeoutError(f"Input timeout after {timeout}s", timeout_seconds=timeout)
+        # Use selectors for cross-platform stdin polling
+        sel = selectors.DefaultSelector()
+        try:
+            sel.register(sys.stdin, selectors.EVENT_READ)
 
-            # Check if stdin has data (non-blocking)
-            if sys.stdin in select.select([sys.stdin], [], [], 1.0)[0]:
-                line = sys.stdin.readline().strip()
-                if line:
-                    try:
-                        response = json.loads(line)
-                        if (
-                            response.get("type") == "input_response"
-                            and response.get("data", {}).get("id") == request_id
-                        ):
-                            return response["data"].get("value")
-                    except json.JSONDecodeError:
-                        continue
+            start_time = datetime.now()
+            while True:
+                elapsed = (datetime.now() - start_time).total_seconds()
+                remaining = timeout - elapsed
+                if remaining <= 0:
+                    raise SDKTimeoutError(
+                        f"Input timeout after {timeout}s",
+                        timeout_seconds=timeout,
+                        elapsed_seconds=elapsed,
+                    )
+
+                # Wait for stdin with remaining timeout (poll every 1s max)
+                poll_timeout = min(1.0, remaining)
+                events = sel.select(timeout=poll_timeout)
+
+                if events:
+                    line = sys.stdin.readline().strip()
+                    if line:
+                        try:
+                            response = json.loads(line)
+                            if (
+                                response.get("type") == "input_response"
+                                and response.get("data", {}).get("id") == request_id
+                            ):
+                                return response["data"].get("value")
+                        except json.JSONDecodeError:
+                            continue
+        finally:
+            sel.unregister(sys.stdin)
+            sel.close()

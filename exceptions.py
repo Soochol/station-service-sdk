@@ -77,8 +77,11 @@ class StepError(SequenceError):
         super().__init__(message, code="STEP_ERROR", details=details)
 
 
-class TimeoutError(SequenceError):
-    """Timeout during sequence or step execution."""
+class SequenceTimeoutError(SequenceError):
+    """Timeout during sequence or step execution.
+
+    Note: Named SequenceTimeoutError to avoid shadowing builtins.TimeoutError.
+    """
 
     def __init__(
         self,
@@ -104,6 +107,10 @@ class TimeoutError(SequenceError):
         if self.details:
             base_msg = f"{base_msg} - Details: {self.details}"
         return base_msg
+
+
+# Backward compatibility alias (shadows builtins.TimeoutError intentionally for legacy code)
+TimeoutError = SequenceTimeoutError
 
 
 class AbortError(SequenceError):
@@ -182,8 +189,11 @@ class HardwareError(SequenceError):
         super().__init__(message, code="HARDWARE_ERROR", details=details)
 
 
-class ConnectionError(HardwareError):
-    """Exception for driver connection errors."""
+class HardwareConnectionError(HardwareError):
+    """Exception for driver connection errors.
+
+    Note: Named HardwareConnectionError to avoid shadowing builtins.ConnectionError.
+    """
 
     def __init__(
         self,
@@ -197,6 +207,10 @@ class ConnectionError(HardwareError):
         self.port = port
         super().__init__(message, device=device, details=details)
         self.code = "CONNECTION_ERROR"
+
+
+# Backward compatibility alias (shadows builtins.ConnectionError intentionally for legacy code)
+ConnectionError = HardwareConnectionError
 
 
 class CommunicationError(HardwareError):

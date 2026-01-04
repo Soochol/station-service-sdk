@@ -44,20 +44,18 @@ Usage:
 
 import asyncio
 import logging
-import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional
 
 from .sequence_cli import CLIArgs, parse_args, print_error
 from .context import ExecutionContext, Measurement
 from .protocol import OutputProtocol
-from .exceptions import SequenceError, SetupError, TeardownError, AbortError
+from .exceptions import SequenceError, SetupError, AbortError
 from .interfaces import OutputStrategy, LifecycleHook, CompositeHook
-from .sdk_types import RunResult, ExecutionResult
+from .sdk_types import RunResult
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +137,9 @@ class SequenceBase(ABC):
         self._total_steps: int = 0
         self._aborted: bool = False
 
+        # Task tracking for async hook calls (prevents fire-and-forget race conditions)
+        self._pending_hook_tasks: set = set()
+
         # Lifecycle step tracking (setup/teardown as automatic steps)
         self._setup_start_time: float = 0.0
         self._setup_passed: bool = False
@@ -146,6 +147,14 @@ class SequenceBase(ABC):
         self._setup_error: Optional[str] = None
         self._setup_step_emitted: bool = False
         self._run_total_steps: int = 0  # Captured from run()'s first step
+
+        # Run phase error tracking
+        self._run_error: Optional[str] = None
+        self._run_exception: Optional[Exception] = None
+
+        # Teardown phase error tracking
+        self._teardown_error: Optional[str] = None
+        self._teardown_exception: Optional[Exception] = None
 
     # =========================================================================
     # CLI Entry Point
@@ -258,9 +267,6 @@ class SequenceBase(ABC):
             "steps": [],
             "error": None,
         }
-        setup_error: Optional[Exception] = None
-        run_error: Optional[Exception] = None
-        teardown_error: Optional[Exception] = None
 
         try:
             # Setup phase - track timing for step emission
@@ -276,7 +282,6 @@ class SequenceBase(ABC):
                 self._setup_passed = False
                 self._setup_duration = time.time() - self._setup_start_time
                 self._setup_error = str(e) if not isinstance(e, SetupError) else e.message
-                setup_error = e
                 await self._hooks.on_setup_complete(self.context, e)
                 await self._hooks.on_error(self.context, e, "setup")
                 raise
@@ -303,7 +308,9 @@ class SequenceBase(ABC):
                     result["data"] = run_result.get("data", {})
                 await self._hooks.on_run_complete(self.context, result)
             except Exception as e:
-                run_error = e
+                # Track run error in instance variables for hook access
+                self._run_exception = e
+                self._run_error = str(e) if not isinstance(e, SequenceError) else e.message
                 await self._hooks.on_run_complete(self.context, result, e)
                 await self._hooks.on_error(self.context, e, "run")
                 raise
@@ -339,7 +346,9 @@ class SequenceBase(ABC):
                 await self._hooks.on_teardown_complete(self.context)
             except Exception as e:
                 teardown_passed = False
-                teardown_error = e
+                # Track teardown error in instance variables for hook access
+                self._teardown_exception = e
+                self._teardown_error = str(e)
                 await self._hooks.on_teardown_complete(self.context, e)
                 await self._hooks.on_error(self.context, e, "teardown")
                 self._output.error("TEARDOWN_ERROR", str(e))
@@ -349,12 +358,15 @@ class SequenceBase(ABC):
             teardown_duration = time.time() - teardown_start
 
             # Emit teardown step
-            self._emit_teardown_step(teardown_passed, teardown_duration, str(teardown_error) if teardown_error else None)
+            self._emit_teardown_step(teardown_passed, teardown_duration, self._teardown_error)
 
             # Complete
             self.context.complete()
             result["steps"] = [sr.to_dict() for sr in self._step_results]
             result["duration"] = self.context.duration_seconds
+
+            # Wait for any pending hook tasks before final completion
+            await self._await_pending_hooks()
 
             # Call sequence complete hook
             await self._hooks.on_sequence_complete(self.context, result)
@@ -479,6 +491,51 @@ class SequenceBase(ABC):
         pass
 
     # =========================================================================
+    # Error State Accessors (for hooks and external access)
+    # =========================================================================
+
+    @property
+    def setup_error(self) -> Optional[str]:
+        """Get setup phase error message, if any."""
+        return self._setup_error
+
+    @property
+    def setup_exception(self) -> Optional[Exception]:
+        """Get setup phase exception object, if any."""
+        # Note: Setup exception is re-raised, so we reconstruct from error message
+        return SetupError(self._setup_error) if self._setup_error else None
+
+    @property
+    def run_error(self) -> Optional[str]:
+        """Get run phase error message, if any."""
+        return self._run_error
+
+    @property
+    def run_exception(self) -> Optional[Exception]:
+        """Get run phase exception object, if any."""
+        return self._run_exception
+
+    @property
+    def teardown_error(self) -> Optional[str]:
+        """Get teardown phase error message, if any."""
+        return self._teardown_error
+
+    @property
+    def teardown_exception(self) -> Optional[Exception]:
+        """Get teardown phase exception object, if any."""
+        return self._teardown_exception
+
+    @property
+    def last_error(self) -> Optional[str]:
+        """Get the most recent error from any phase."""
+        return self._teardown_error or self._run_error or self._setup_error
+
+    @property
+    def last_exception(self) -> Optional[Exception]:
+        """Get the most recent exception from any phase."""
+        return self._teardown_exception or self._run_exception or self.setup_exception
+
+    # =========================================================================
     # Output Helper Methods
     # =========================================================================
 
@@ -554,12 +611,10 @@ class SequenceBase(ABC):
         self._output.status("running", progress, step_name, f"Step {index}/{adjusted_total}")
         self._output.step_start(step_name, index, adjusted_total, description)
 
-        # Call hook with error logging (fire and forget pattern with error handling)
-        asyncio.create_task(
-            self._safe_call_hook(
-                self._hooks.on_step_start(self.context, step_name, index, adjusted_total),
-                "on_step_start",
-            )
+        # Call hook with tracked task scheduling (prevents race conditions)
+        self._schedule_hook_task(
+            self._hooks.on_step_start(self.context, step_name, index, adjusted_total),
+            "on_step_start",
         )
 
     def emit_step_complete(
@@ -609,14 +664,12 @@ class SequenceBase(ABC):
             data=data,
         )
 
-        # Call hook with error logging
-        asyncio.create_task(
-            self._safe_call_hook(
-                self._hooks.on_step_complete(
-                    self.context, step_name, index, passed, duration, error
-                ),
-                "on_step_complete",
-            )
+        # Call hook with tracked task scheduling (prevents race conditions)
+        self._schedule_hook_task(
+            self._hooks.on_step_complete(
+                self.context, step_name, index, passed, duration, error
+            ),
+            "on_step_complete",
         )
 
     def emit_measurement(
@@ -664,12 +717,10 @@ class SequenceBase(ABC):
             step_name=self._current_step,
         )
 
-        # Call hook with error logging
-        asyncio.create_task(
-            self._safe_call_hook(
-                self._hooks.on_measurement(self.context, measurement),
-                "on_measurement",
-            )
+        # Call hook with tracked task scheduling (prevents race conditions)
+        self._schedule_hook_task(
+            self._hooks.on_measurement(self.context, measurement),
+            "on_measurement",
         )
 
     def emit_error(
@@ -696,6 +747,59 @@ class SequenceBase(ABC):
     # =========================================================================
     # Internal Helpers
     # =========================================================================
+
+    def _schedule_hook_task(self, coro, hook_name: str) -> asyncio.Task:
+        """
+        Schedule an async hook call with proper task tracking.
+
+        Tasks are tracked in _pending_hook_tasks to ensure they complete
+        before sequence ends. This prevents fire-and-forget race conditions.
+
+        Args:
+            coro: The coroutine to schedule
+            hook_name: Name of the hook for error messages
+
+        Returns:
+            The created asyncio.Task
+        """
+        task = asyncio.create_task(self._safe_call_hook(coro, hook_name))
+
+        # Track the task
+        self._pending_hook_tasks.add(task)
+
+        # Remove from tracking when done
+        task.add_done_callback(self._pending_hook_tasks.discard)
+
+        return task
+
+    async def _await_pending_hooks(self, timeout: float = 5.0) -> None:
+        """
+        Wait for all pending hook tasks to complete.
+
+        Called before sequence completion to ensure all hooks finish.
+        Uses a timeout to prevent hanging on slow hooks.
+
+        Args:
+            timeout: Maximum time to wait for hooks in seconds
+        """
+        if not self._pending_hook_tasks:
+            return
+
+        pending = list(self._pending_hook_tasks)
+        if pending:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending, return_exceptions=True),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Timeout waiting for {len(pending)} pending hook tasks"
+                )
+                # Cancel remaining tasks
+                for task in pending:
+                    if not task.done():
+                        task.cancel()
 
     async def _safe_call_hook(self, coro, hook_name: str) -> None:
         """

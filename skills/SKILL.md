@@ -171,6 +171,48 @@ dependencies:
 
 ---
 
+## 에러 상태 접근자
+
+실행 중 발생한 에러에 접근할 수 있는 프로퍼티들입니다.
+
+| 프로퍼티 | 타입 | 설명 |
+|---------|------|------|
+| `setup_error` | `Optional[str]` | Setup 단계 에러 메시지 |
+| `run_error` | `Optional[str]` | Run 단계 에러 메시지 |
+| `teardown_error` | `Optional[str]` | Teardown 단계 에러 메시지 |
+| `last_error` | `Optional[str]` | 가장 최근 에러 (teardown → run → setup 순) |
+| `setup_exception` | `Optional[Exception]` | Setup 예외 객체 |
+| `run_exception` | `Optional[Exception]` | Run 예외 객체 |
+| `teardown_exception` | `Optional[Exception]` | Teardown 예외 객체 |
+| `last_exception` | `Optional[Exception]` | 가장 최근 예외 객체 |
+
+### 활용 예시
+
+```python
+async def teardown(self) -> None:
+    # 이전 단계 에러 확인
+    if self.last_error:
+        self.emit_log("warning", f"에러 발생: {self.last_error}")
+        # 실패 시 추가 진단 수집
+        if self.mcu and hasattr(self.mcu, 'get_diagnostics'):
+            diag = await self.mcu.get_diagnostics()
+            self.emit_log("debug", f"MCU 진단: {diag}")
+
+    # 정리 로직...
+    await self.mcu.disconnect()
+```
+
+### 활용 시나리오
+
+| 시나리오 | 활용 방법 |
+|---------|----------|
+| 조건부 정리 | `if self.run_error: await self.mcu.emergency_stop()` |
+| 에러 로깅 강화 | `logger.error(f"Phase: run, Error: {self.run_error}")` |
+| 진단 데이터 수집 | 실패 시 MCU 상태, 로그 덤프 등 추가 수집 |
+| Lifecycle Hook | 외부 모니터링 시스템에 상세 에러 전송 |
+
+---
+
 ## 예외 처리
 
 SDK에서 제공하는 예외 클래스들:
