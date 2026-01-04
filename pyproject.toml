@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "station-service-sdk"
-version = "2.0.0"
+version = "3.0.0"
 description = "SDK for building test sequences for Station Service"
 readme = "README.md"
 license = "MIT"
@@ -43,7 +43,4 @@ Documentation = "https://github.com/Soochol/station-service-sdk#readme"
 Repository = "https://github.com/Soochol/station-service-sdk"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
-
-[tool.hatch.build.targets.wheel.sources]
-"" = "station_service_sdk"
+packages = ["station_service_sdk"]
