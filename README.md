@@ -6,7 +6,7 @@ SDK for building test sequences for Station Service.
 
 ```bash
 # From GitHub
-pip install git+https://github.com/F2X/station-service-sdk.git
+pip install git+https://github.com/Soochol/station-service-sdk.git
 
 # Install Claude Code skill
 station-sdk init

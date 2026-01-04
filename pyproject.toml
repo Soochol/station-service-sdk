@@ -38,9 +38,9 @@ dev = [
 station-sdk = "station_service_sdk.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/F2X/station-service-sdk"
-Documentation = "https://github.com/F2X/station-service-sdk#readme"
-Repository = "https://github.com/F2X/station-service-sdk"
+Homepage = "https://github.com/Soochol/station-service-sdk"
+Documentation = "https://github.com/Soochol/station-service-sdk#readme"
+Repository = "https://github.com/Soochol/station-service-sdk"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
