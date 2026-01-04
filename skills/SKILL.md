@@ -301,7 +301,7 @@ python -m my_sequence.main --stop
 ## 타입 정의
 
 ```python
-from station_service_sdk.types import RunResult, MeasurementDict
+from station_service_sdk import RunResult, MeasurementDict
 
 async def run(self) -> RunResult:
     return {

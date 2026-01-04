@@ -45,18 +45,19 @@ Usage:
 import asyncio
 import logging
 import sys
+import time
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, Union
 
-from .cli import CLIArgs, parse_args, print_error
+from .sequence_cli import CLIArgs, parse_args, print_error
 from .context import ExecutionContext, Measurement
 from .protocol import OutputProtocol
 from .exceptions import SequenceError, SetupError, TeardownError, AbortError
 from .interfaces import OutputStrategy, LifecycleHook, CompositeHook
-from .types import RunResult, ExecutionResult
+from .sdk_types import RunResult, ExecutionResult
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,14 @@ class SequenceBase(ABC):
         self._current_step_index: int = 0
         self._total_steps: int = 0
         self._aborted: bool = False
+
+        # Lifecycle step tracking (setup/teardown as automatic steps)
+        self._setup_start_time: float = 0.0
+        self._setup_passed: bool = False
+        self._setup_duration: float = 0.0
+        self._setup_error: Optional[str] = None
+        self._setup_step_emitted: bool = False
+        self._run_total_steps: int = 0  # Captured from run()'s first step
 
     # =========================================================================
     # CLI Entry Point
@@ -234,6 +243,11 @@ class SequenceBase(ABC):
         Calls setup() -> run() -> teardown() with proper error handling.
         Lifecycle hooks are called at each phase transition.
 
+        Setup and teardown are automatically emitted as steps:
+        - setup: step index 0
+        - run() steps: indices 1 to N (offset by +1)
+        - teardown: step index N+1
+
         Returns:
             Result dictionary with 'passed', 'measurements', 'steps', etc.
         """
@@ -249,13 +263,19 @@ class SequenceBase(ABC):
         teardown_error: Optional[Exception] = None
 
         try:
-            # Setup phase
+            # Setup phase - track timing for step emission
+            self._setup_start_time = time.time()
             self._output.status("setup", 0, message="Initializing...")
             await self._hooks.on_setup_start(self.context)
             try:
                 await self.setup()
+                self._setup_passed = True
+                self._setup_duration = time.time() - self._setup_start_time
                 await self._hooks.on_setup_complete(self.context)
             except Exception as e:
+                self._setup_passed = False
+                self._setup_duration = time.time() - self._setup_start_time
+                self._setup_error = str(e) if not isinstance(e, SetupError) else e.message
                 setup_error = e
                 await self._hooks.on_setup_complete(self.context, e)
                 await self._hooks.on_error(self.context, e, "setup")
@@ -291,6 +311,8 @@ class SequenceBase(ABC):
         except SetupError as e:
             result["error"] = f"Setup failed: {e.message}"
             self._output.error(e.code, e.message)
+            # Emit setup step as failed (total=2 for setup+teardown only)
+            self._emit_setup_step_failed(total=2)
 
         except AbortError as e:
             result["error"] = f"Aborted: {e.message}"
@@ -308,18 +330,26 @@ class SequenceBase(ABC):
 
         finally:
             # Teardown phase (always runs)
+            teardown_start = time.time()
+            teardown_passed = True
             try:
                 self._output.status("teardown", 95, message="Cleaning up...")
                 await self._hooks.on_teardown_start(self.context)
                 await self.teardown()
                 await self._hooks.on_teardown_complete(self.context)
             except Exception as e:
+                teardown_passed = False
                 teardown_error = e
                 await self._hooks.on_teardown_complete(self.context, e)
                 await self._hooks.on_error(self.context, e, "teardown")
                 self._output.error("TEARDOWN_ERROR", str(e))
                 if result["error"] is None:
                     result["error"] = f"Teardown failed: {str(e)}"
+
+            teardown_duration = time.time() - teardown_start
+
+            # Emit teardown step
+            self._emit_teardown_step(teardown_passed, teardown_duration, str(teardown_error) if teardown_error else None)
 
             # Complete
             self.context.complete()
@@ -338,6 +368,60 @@ class SequenceBase(ABC):
             )
 
         return result
+
+    def _emit_setup_step_failed(self, total: int) -> None:
+        """Emit setup step as failed when setup fails before run() starts."""
+        if self._setup_step_emitted:
+            return
+        self._setup_step_emitted = True
+
+        # Record setup step result
+        setup_result = StepResult(
+            name="setup",
+            index=0,
+            passed=False,
+            duration=self._setup_duration,
+            error=self._setup_error,
+        )
+        # Insert at beginning of step results
+        self._step_results.insert(0, setup_result)
+
+        # Emit step events
+        self._output.step_start("setup", 0, total, "Hardware initialization")
+        self._output.step_complete(
+            step_name="setup",
+            index=0,
+            passed=False,
+            duration=self._setup_duration,
+            error=self._setup_error,
+        )
+
+    def _emit_teardown_step(self, passed: bool, duration: float, error: Optional[str]) -> None:
+        """Emit teardown as the final step."""
+        # Calculate teardown index (after all run steps + setup)
+        # If setup step was emitted, run steps are offset by 1
+        teardown_index = self._run_total_steps + 1 if self._run_total_steps > 0 else 1
+        total = teardown_index + 1  # +1 because teardown is part of total
+
+        # Record teardown step result
+        teardown_result = StepResult(
+            name="teardown",
+            index=teardown_index,
+            passed=passed,
+            duration=duration,
+            error=error,
+        )
+        self._step_results.append(teardown_result)
+
+        # Emit step events
+        self._output.step_start("teardown", teardown_index, total, "Resource cleanup")
+        self._output.step_complete(
+            step_name="teardown",
+            index=teardown_index,
+            passed=passed,
+            duration=duration,
+            error=error,
+        )
 
     # =========================================================================
     # Abstract Methods (must implement in subclass)
@@ -421,22 +505,59 @@ class SequenceBase(ABC):
 
         Args:
             step_name: Name of the step
-            index: Current step index (1-based)
-            total: Total number of steps
+            index: Current step index (1-based from run())
+            total: Total number of steps (from run(), will be adjusted +2 for setup/teardown)
             description: Optional step description
+
+        Note:
+            The index and total are automatically adjusted to include
+            setup (index 0) and teardown (last index) as lifecycle steps.
         """
+        # Capture run()'s total steps on first call
+        if self._run_total_steps == 0:
+            self._run_total_steps = total
+
+        # Emit setup step first (if not emitted yet)
+        if not self._setup_step_emitted:
+            self._setup_step_emitted = True
+            adjusted_total = total + 2  # +1 for setup, +1 for teardown
+
+            # Record setup step result
+            setup_result = StepResult(
+                name="setup",
+                index=0,
+                passed=self._setup_passed,
+                duration=self._setup_duration,
+                error=self._setup_error,
+            )
+            self._step_results.insert(0, setup_result)
+
+            # Emit setup step events
+            self._output.step_start("setup", 0, adjusted_total, "Hardware initialization")
+            self._output.step_complete(
+                step_name="setup",
+                index=0,
+                passed=self._setup_passed,
+                duration=self._setup_duration,
+                error=self._setup_error,
+            )
+
+        # Adjust total to include setup/teardown
+        adjusted_total = total + 2
+
         self._current_step = step_name
         self._current_step_index = index
-        self._total_steps = total
+        self._total_steps = adjusted_total
 
-        progress = ((index - 1) / total) * 100 if total > 0 else 0
-        self._output.status("running", progress, step_name, f"Step {index}/{total}")
-        self._output.step_start(step_name, index, total, description)
+        # Progress calculation: setup(0) is done, current is index out of adjusted_total
+        progress = (index / adjusted_total) * 100 if adjusted_total > 0 else 0
+        self._output.status("running", progress, step_name, f"Step {index}/{adjusted_total}")
+        self._output.step_start(step_name, index, adjusted_total, description)
 
         # Call hook with error logging (fire and forget pattern with error handling)
         asyncio.create_task(
             self._safe_call_hook(
-                self._hooks.on_step_start(self.context, step_name, index, total),
+                self._hooks.on_step_start(self.context, step_name, index, adjusted_total),
                 "on_step_start",
             )
         )
