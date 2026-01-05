@@ -68,6 +68,21 @@ def cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    """Handle the validate command."""
+    from .validate import validate_directory, validate_manifest
+
+    path = Path(args.path)
+    check_files = not args.no_check_files
+
+    if args.dir or path.is_dir():
+        success = validate_directory(path, check_files)
+    else:
+        success = validate_manifest(path, check_files)
+
+    return 0 if success else 1
+
+
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -98,7 +113,38 @@ def main() -> int:
         help="Show version",
     )
     version_parser.set_defaults(func=cmd_version)
-    
+
+    # validate command
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="Validate manifest.yaml files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  station-sdk validate manifest.yaml
+  station-sdk validate sequences/my_sequence/manifest.yaml
+  station-sdk validate --dir sequences/
+  station-sdk validate --no-check-files manifest.yaml
+        """,
+    )
+    validate_parser.add_argument(
+        "path",
+        nargs="?",
+        default="manifest.yaml",
+        help="Path to manifest.yaml file or directory (default: manifest.yaml)",
+    )
+    validate_parser.add_argument(
+        "-d", "--dir",
+        action="store_true",
+        help="Treat path as directory and validate all manifest.yaml files",
+    )
+    validate_parser.add_argument(
+        "--no-check-files",
+        action="store_true",
+        help="Skip checking if referenced files exist",
+    )
+    validate_parser.set_defaults(func=cmd_validate)
+
     args = parser.parse_args()
     
     if args.command is None:

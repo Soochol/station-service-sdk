@@ -169,6 +169,54 @@ dependencies:
     - pyserial>=3.5
 ```
 
+### hardware 섹션 규칙
+
+> ⚠️ **주의**: hardware 정의 시 `driver`와 `class` 필드는 **필수**입니다.
+
+```yaml
+# ✅ 올바른 예시
+hardware:
+  device:
+    display_name: "장치명"
+    driver: drivers.my_device    # 필수
+    class: MyDriver              # 필수
+    config_schema: ...
+
+# ❌ 잘못된 예시 (Pydantic 검증 실패)
+hardware:
+  device:
+    display_name: "장치명"
+    driver: null                 # null 불가
+    # class 누락                 # 필수 필드 누락
+```
+
+**CLI 기반 시퀀스** (외부 프로그램 직접 호출):
+- 하드웨어 드라이버가 필요 없으면 `hardware` 섹션을 **생략**
+- `driver: null`은 유효하지 않음
+
+```yaml
+# CLI 기반 시퀀스 예시 (hardware 섹션 없음)
+name: stm32_firmware_upload
+version: "1.0.0"
+
+entry_point:
+  module: sequence
+  class: STM32FirmwareUpload
+
+modes:
+  automatic: true
+  manual: true
+  cli: true
+
+# hardware 섹션 생략 - STM32CubeProgrammer CLI 직접 사용
+
+parameters:
+  firmware_path:
+    display_name: "펌웨어 경로"
+    type: string
+    required: true
+```
+
 ---
 
 ## 에러 상태 접근자
@@ -340,6 +388,31 @@ python -m my_sequence.main --stop
 
 ---
 
+## SDK CLI 도구
+
+SDK 설치 후 사용 가능한 CLI 명령어:
+
+```bash
+# manifest.yaml 검증 (업로드 전 필수!)
+station-sdk validate manifest.yaml
+station-sdk validate --dir sequences/
+
+# Claude Code skills 설치
+station-sdk init
+
+# 버전 확인
+station-sdk version
+```
+
+| 명령어 | 설명 |
+|--------|------|
+| `station-sdk validate <path>` | manifest.yaml 스키마 및 파일 검증 |
+| `station-sdk validate --dir <path>` | 디렉토리 내 모든 manifest 검증 |
+| `station-sdk init` | Claude Code skills 설치 |
+| `station-sdk version` | SDK 버전 표시 |
+
+---
+
 ## 타입 정의
 
 ```python
@@ -363,6 +436,7 @@ async def run(self) -> RunResult:
 - [ ] `setup()`, `run()`, `teardown()` 구현
 - [ ] `manifest.yaml` 작성
 - [ ] `run()` 메서드가 `RunResult` 반환
+- [ ] **`station-sdk validate` 실행하여 검증 통과**
 
 ### 권장
 - [ ] 적절한 `emit_step_start/complete` 호출
