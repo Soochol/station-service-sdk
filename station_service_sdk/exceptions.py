@@ -110,7 +110,7 @@ class SequenceTimeoutError(SequenceError):
 
 
 # Backward compatibility alias (shadows builtins.TimeoutError intentionally for legacy code)
-TimeoutError = SequenceTimeoutError
+TimeoutError = SequenceTimeoutError  # pylint: disable=redefined-builtin
 
 
 class AbortError(SequenceError):
@@ -210,7 +210,7 @@ class HardwareConnectionError(HardwareError):
 
 
 # Backward compatibility alias (shadows builtins.ConnectionError intentionally for legacy code)
-ConnectionError = HardwareConnectionError
+ConnectionError = HardwareConnectionError  # pylint: disable=redefined-builtin
 
 
 class CommunicationError(HardwareError):
