@@ -281,7 +281,10 @@ class SequenceBase(ABC):
             except Exception as e:
                 self._setup_passed = False
                 self._setup_duration = time.time() - self._setup_start_time
-                self._setup_error = str(e) if not isinstance(e, SetupError) else e.message
+                self._setup_error = (
+                    str(e) if not isinstance(e, SetupError)
+                    else e.message  # pylint: disable=no-member
+                )
                 await self._hooks.on_setup_complete(self.context, e)
                 await self._hooks.on_error(self.context, e, "setup")
                 raise
@@ -310,7 +313,10 @@ class SequenceBase(ABC):
             except Exception as e:
                 # Track run error in instance variables for hook access
                 self._run_exception = e
-                self._run_error = str(e) if not isinstance(e, SequenceError) else e.message
+                self._run_error = (
+                    str(e) if not isinstance(e, SequenceError)
+                    else e.message  # pylint: disable=no-member
+                )
                 await self._hooks.on_run_complete(self.context, result, e)
                 await self._hooks.on_error(self.context, e, "run")
                 raise
