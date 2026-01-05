@@ -29,7 +29,7 @@ class DryRunOutputStrategy(OutputStrategy):
     Collects step results and measurements without printing to stdout.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.step_results: List[Dict[str, Any]] = []
         self.measurements: Dict[str, Any] = {}
         self.logs: List[Dict[str, Any]] = []
@@ -117,10 +117,10 @@ class DryRunOutputStrategy(OutputStrategy):
         self,
         request_id: str,
         prompt: str,
-        input_type: str,
+        input_type: str = "confirm",
         options: Optional[List[str]] = None,
         default: Any = None,
-        timeout: float = 300,
+        timeout: Optional[float] = None,
     ) -> None:
         pass  # Not supported in dry run
 

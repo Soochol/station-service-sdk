@@ -670,7 +670,7 @@ class SequenceLoader:
             # Store step config overrides in a separate file to avoid
             # modifying the manifest which may be version-controlled
             overrides_path = package_path / "step_overrides.yaml"
-            overrides = {}
+            overrides: Dict[str, Any] = {}
             if overrides_path.exists():
                 with open(overrides_path, "r", encoding="utf-8") as f:
                     overrides = yaml.safe_load(f) or {}

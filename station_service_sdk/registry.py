@@ -199,8 +199,6 @@ class SequenceRegistry:
         Returns:
             List of discovered sequence names
         """
-        from .base import SequenceBase
-
         discovered = []
 
         try:

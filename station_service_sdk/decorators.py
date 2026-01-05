@@ -32,7 +32,7 @@ Usage (deprecated):
 import warnings
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, cast
 
 from .types import StepMeta
 
@@ -105,18 +105,18 @@ def sequence(
             DeprecationWarning,
             stacklevel=3,
         )
-        cls._sequence_meta = SequenceMeta(
+        cls._sequence_meta = SequenceMeta(  # type: ignore[attr-defined]
             name=name,
             description=description,
             version=version,
         )
         # Also add individual attributes for easier access
         if not hasattr(cls, "name"):
-            cls.name = name
+            cls.name = name  # type: ignore[attr-defined]
         if not hasattr(cls, "description"):
-            cls.description = description
+            cls.description = description  # type: ignore[attr-defined]
         if not hasattr(cls, "version"):
-            cls.version = version
+            cls.version = version  # type: ignore[attr-defined]
         return cls
 
     return decorator
@@ -158,7 +158,7 @@ def step(
 
         # Store metadata on the function
         step_name = name if name is not None else func.__name__
-        wrapper._step_meta = StepMeta(
+        wrapper._step_meta = StepMeta(  # type: ignore[attr-defined]
             name=step_name,
             order=order,
             timeout=timeout,
@@ -168,8 +168,8 @@ def step(
             description=description or func.__doc__ or "",
         )
         # Keep original function reference for async support
-        wrapper._original_func = func
-        return wrapper  # type: ignore
+        wrapper._original_func = func  # type: ignore[attr-defined]
+        return cast(F, wrapper)
 
     return decorator
 
@@ -198,13 +198,13 @@ def parameter(
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             return func(*args, **kwargs)
 
-        wrapper._parameter_meta = ParameterMeta(
+        wrapper._parameter_meta = ParameterMeta(  # type: ignore[attr-defined]
             name=name,
             display_name=display_name or name,
             unit=unit,
             description=description or func.__doc__ or "",
         )
-        return wrapper  # type: ignore
+        return cast(F, wrapper)
 
     return decorator
 

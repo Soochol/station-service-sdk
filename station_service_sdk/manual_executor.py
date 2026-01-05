@@ -16,14 +16,13 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .loader import SequenceLoader
-    from .manifest import SequenceManifest, ManualCommand
+    from .manifest import SequenceManifest
 
 from .driver_registry import DriverRegistry, DriverLoadError, DriverConnectionError
 from .helpers import collect_steps
 from .context import ExecutionContext
 from .base import SequenceBase
 from .simulator import DryRunOutputStrategy
-from .types import SimulationResult
 
 logger = logging.getLogger(__name__)
 

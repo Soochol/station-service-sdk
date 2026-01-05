@@ -74,12 +74,14 @@ class Measurement:
         if self.passed is None:
             if is_numeric:
                 # Numeric: compare against limits
+                # Cast to float for type safety (we've already verified is_numeric)
+                numeric_value = float(self.value)  # type: ignore[arg-type]
                 if self.min_value is not None and self.max_value is not None:
-                    self.passed = self.min_value <= self.value <= self.max_value
+                    self.passed = self.min_value <= numeric_value <= self.max_value
                 elif self.min_value is not None:
-                    self.passed = self.value >= self.min_value
+                    self.passed = numeric_value >= self.min_value
                 elif self.max_value is not None:
-                    self.passed = self.value <= self.max_value
+                    self.passed = numeric_value <= self.max_value
                 # No limits: leave passed as None (unknown)
             elif isinstance(self.value, bool):
                 # Boolean: passed equals the value

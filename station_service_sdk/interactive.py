@@ -22,7 +22,6 @@ from .helpers import collect_steps
 from .context import ExecutionContext
 from .base import SequenceBase
 from .simulator import DryRunOutputStrategy, MockHardware
-from .types import SimulationResult
 
 logger = logging.getLogger(__name__)
 
