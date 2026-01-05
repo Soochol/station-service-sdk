@@ -5,14 +5,155 @@ Provides validation functionality for manifest.yaml files
 before uploading sequence packages.
 """
 
+import ast
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Set, Tuple
 
 import yaml
 from pydantic import ValidationError
 
 from .manifest import SequenceManifest
+
+
+@dataclass
+class StepValidationResult:
+    """Result of step name validation between manifest and sequence."""
+
+    passed: bool
+    manifest_steps: Set[str] = field(default_factory=set)
+    sequence_steps: Set[str] = field(default_factory=set)
+    missing_in_manifest: Set[str] = field(default_factory=set)
+    missing_in_sequence: Set[str] = field(default_factory=set)
+    dynamic_warnings: List[str] = field(default_factory=list)
+
+
+class EmitStepVisitor(ast.NodeVisitor):
+    """AST visitor to extract emit_step_start call arguments."""
+
+    def __init__(self) -> None:
+        self.literal_names: Set[str] = set()
+        self.dynamic_warnings: List[str] = []
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        """Visit function call nodes to find emit_step_start calls."""
+        # Check if this is a method call on self
+        if isinstance(node.func, ast.Attribute):
+            if node.func.attr in ("emit_step_start", "emit_step_complete"):
+                self._extract_step_name(node)
+
+        # Continue visiting child nodes
+        self.generic_visit(node)
+
+    def _extract_step_name(self, node: ast.Call) -> None:
+        """Extract step name from emit_step_start/emit_step_complete call."""
+        if not node.args:
+            return
+
+        first_arg = node.args[0]
+
+        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+            # Literal string: self.emit_step_start("step_name", ...)
+            self.literal_names.add(first_arg.value)
+        elif isinstance(first_arg, ast.JoinedStr):
+            # f-string: self.emit_step_start(f"step_{num}", ...)
+            self.dynamic_warnings.append(
+                f"Line {node.lineno}: f-string step name detected"
+            )
+        elif isinstance(first_arg, ast.Name):
+            # Variable: self.emit_step_start(step_name, ...)
+            self.dynamic_warnings.append(
+                f"Line {node.lineno}: variable step name '{first_arg.id}'"
+            )
+        elif isinstance(first_arg, ast.BinOp):
+            # String concatenation: self.emit_step_start("step_" + suffix, ...)
+            self.dynamic_warnings.append(
+                f"Line {node.lineno}: dynamic step name (string concatenation)"
+            )
+        elif isinstance(first_arg, ast.Subscript):
+            # Dict/list access: self.emit_step_start(steps[i], ...)
+            self.dynamic_warnings.append(
+                f"Line {node.lineno}: dynamic step name (subscript access)"
+            )
+        else:
+            # Other dynamic patterns
+            self.dynamic_warnings.append(
+                f"Line {node.lineno}: dynamic step name (cannot analyze statically)"
+            )
+
+
+def extract_emit_step_names(sequence_path: Path) -> Tuple[Set[str], List[str]]:
+    """
+    Extract step names from emit_step_start/emit_step_complete calls in sequence file.
+
+    Uses AST parsing to find all emit_step_start and emit_step_complete calls
+    and extracts the step name argument.
+
+    Args:
+        sequence_path: Path to the sequence Python file
+
+    Returns:
+        Tuple of (literal_step_names, dynamic_warnings)
+        - literal_step_names: Set of step names that are literal strings
+        - dynamic_warnings: List of warnings for dynamic step names that cannot be analyzed
+    """
+    try:
+        source = sequence_path.read_text(encoding="utf-8")
+    except (OSError, IOError) as e:
+        return set(), [f"Could not read file: {e}"]
+
+    try:
+        tree = ast.parse(source, filename=str(sequence_path))
+    except SyntaxError as e:
+        return set(), [f"Syntax error in file: {e}"]
+
+    visitor = EmitStepVisitor()
+    visitor.visit(tree)
+
+    return visitor.literal_names, visitor.dynamic_warnings
+
+
+def validate_step_names(
+    manifest_steps: List[str],
+    sequence_path: Path,
+) -> StepValidationResult:
+    """
+    Validate step names match between manifest and sequence file.
+
+    Compares step names defined in manifest.yaml with step names
+    emitted via emit_step_start() in the sequence file.
+
+    Args:
+        manifest_steps: List of step names from manifest.yaml
+        sequence_path: Path to the sequence Python file
+
+    Returns:
+        StepValidationResult with validation details
+    """
+    # Lifecycle steps are auto-emitted by SDK, exclude from validation
+    lifecycle_steps = {"setup", "teardown"}
+
+    manifest_set = set(manifest_steps) - lifecycle_steps
+    sequence_names, dynamic_warnings = extract_emit_step_names(sequence_path)
+    sequence_set = sequence_names - lifecycle_steps
+
+    # Find mismatches
+    missing_in_manifest = sequence_set - manifest_set
+    missing_in_sequence = manifest_set - sequence_set
+
+    # Validation passes if no steps are emitted that aren't in manifest
+    # (missing_in_sequence is just a warning, not an error)
+    passed = len(missing_in_manifest) == 0
+
+    return StepValidationResult(
+        passed=passed,
+        manifest_steps=manifest_set,
+        sequence_steps=sequence_set,
+        missing_in_manifest=missing_in_manifest,
+        missing_in_sequence=missing_in_sequence,
+        dynamic_warnings=dynamic_warnings,
+    )
 
 
 class Colors:
@@ -47,13 +188,18 @@ def _print_header(msg: str) -> None:
     print(f"\n{Colors.BOLD}{Colors.BLUE}{msg}{Colors.RESET}")
 
 
-def validate_manifest(manifest_path: Path, check_files: bool = True) -> bool:
+def validate_manifest(
+    manifest_path: Path,
+    check_files: bool = True,
+    check_steps: bool = True,
+) -> bool:
     """
     Validate a manifest.yaml file.
 
     Args:
         manifest_path: Path to the manifest.yaml file
         check_files: Whether to check if referenced files exist
+        check_steps: Whether to validate step names match between manifest and sequence
 
     Returns:
         True if validation passed, False otherwise
@@ -127,6 +273,49 @@ def validate_manifest(manifest_path: Path, check_files: bool = True) -> bool:
     else:
         warnings.append("No steps defined")
 
+    # 4.2.1 Validate step names match between manifest and sequence
+    if check_steps and check_files and manifest.steps:
+        module_file = package_dir / f"{manifest.entry_point.module}.py"
+        if module_file.exists():
+            manifest_step_names = [s.name for s in manifest.steps]
+            step_result = validate_step_names(manifest_step_names, module_file)
+
+            if step_result.dynamic_warnings:
+                _print_warning("Dynamic step names detected - cannot fully validate:")
+                for warn in step_result.dynamic_warnings:
+                    print(f"   {Colors.YELLOW}→{Colors.RESET} {warn}")
+                print(
+                    f"   {Colors.CYAN}Hint:{Colors.RESET} "
+                    "동적 step 이름 사용 시 manifest의 steps와 일치하는지 수동 확인 필요"
+                )
+
+            if step_result.passed:
+                if step_result.sequence_steps:
+                    _print_success("Step names match between manifest and sequence")
+                    if step_result.missing_in_sequence:
+                        # Steps defined in manifest but not emitted (warning only)
+                        _print_warning(
+                            f"Steps defined but not emitted: "
+                            f"{', '.join(sorted(step_result.missing_in_sequence))}"
+                        )
+            else:
+                _print_error("Step name mismatch detected:")
+                for step_name in sorted(step_result.missing_in_manifest):
+                    print(
+                        f"   {Colors.RED}→{Colors.RESET} "
+                        f'"{step_name}" emitted in sequence but not defined in manifest'
+                    )
+                for step_name in sorted(step_result.missing_in_sequence):
+                    print(
+                        f"   {Colors.YELLOW}→{Colors.RESET} "
+                        f'"{step_name}" defined in manifest but not used in sequence'
+                    )
+                print(
+                    f"\n   {Colors.CYAN}Hint:{Colors.RESET} "
+                    "manifest.yaml의 steps에 실제 emit하는 step 이름을 정의하세요."
+                )
+                errors.append("Step names do not match between manifest and sequence")
+
     # 4.3 Validate parameters
     if manifest.parameters:
         _print_success(f"Parameters defined: {len(manifest.parameters)}")
@@ -179,8 +368,8 @@ def validate_manifest(manifest_path: Path, check_files: bool = True) -> bool:
             _print_warning(w)
 
     if errors:
-        for e in errors:
-            _print_error(e)
+        for error_msg in errors:
+            _print_error(error_msg)
         print(f"\n{Colors.RED}{Colors.BOLD}FAILED{Colors.RESET} - {len(errors)} error(s)")
         return False
 
@@ -192,13 +381,18 @@ def validate_manifest(manifest_path: Path, check_files: bool = True) -> bool:
     return True
 
 
-def validate_directory(dir_path: Path, check_files: bool = True) -> bool:
+def validate_directory(
+    dir_path: Path,
+    check_files: bool = True,
+    check_steps: bool = True,
+) -> bool:
     """
     Validate all manifest.yaml files in a directory.
 
     Args:
         dir_path: Directory to search for manifest.yaml files
         check_files: Whether to check if referenced files exist
+        check_steps: Whether to validate step names match between manifest and sequence
 
     Returns:
         True if all validations passed, False otherwise
@@ -213,7 +407,7 @@ def validate_directory(dir_path: Path, check_files: bool = True) -> bool:
 
     results: List[Tuple[Path, bool]] = []
     for mf in manifest_files:
-        result = validate_manifest(mf, check_files)
+        result = validate_manifest(mf, check_files, check_steps)
         results.append((mf, result))
 
     # Summary

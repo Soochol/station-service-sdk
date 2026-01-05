@@ -74,11 +74,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
     path = Path(args.path)
     check_files = not args.no_check_files
+    check_steps = not args.no_check_steps
 
     if args.dir or path.is_dir():
-        success = validate_directory(path, check_files)
+        success = validate_directory(path, check_files, check_steps)
     else:
-        success = validate_manifest(path, check_files)
+        success = validate_manifest(path, check_files, check_steps)
 
     return 0 if success else 1
 
@@ -125,6 +126,7 @@ Examples:
   station-sdk validate sequences/my_sequence/manifest.yaml
   station-sdk validate --dir sequences/
   station-sdk validate --no-check-files manifest.yaml
+  station-sdk validate --no-check-steps manifest.yaml
         """,
     )
     validate_parser.add_argument(
@@ -142,6 +144,11 @@ Examples:
         "--no-check-files",
         action="store_true",
         help="Skip checking if referenced files exist",
+    )
+    validate_parser.add_argument(
+        "--no-check-steps",
+        action="store_true",
+        help="Skip validating step names match between manifest and sequence",
     )
     validate_parser.set_defaults(func=cmd_validate)
 
