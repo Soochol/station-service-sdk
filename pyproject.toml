@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "station-service-sdk"
-version = "3.0.0"
+version = "1.0.2"
 description = "SDK for building test sequences for Station Service"
 readme = "README.md"
 license = "MIT"
