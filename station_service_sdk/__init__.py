@@ -164,6 +164,15 @@ from .manual_executor import (
     CommandResult,
 )
 
+# Dependency management
+from .dependencies import (
+    ensure_package,
+    ensure_dependencies,
+    is_installed,
+    check_dependencies,
+    get_missing_packages,
+)
+
 # Decorators (legacy pattern support)
 from .decorators import (
     sequence,
@@ -295,4 +304,10 @@ __all__ = [
     "is_parameter_method",
     "collect_steps_from_decorated_class",
     "collect_parameters_from_decorated_class",
+    # Dependency management
+    "ensure_package",
+    "ensure_dependencies",
+    "is_installed",
+    "check_dependencies",
+    "get_missing_packages",
 ]

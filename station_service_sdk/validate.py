@@ -344,9 +344,19 @@ def validate_manifest(
                         f"Hardware driver not found: {hw.driver} (expected at {driver_file})"
                     )
 
-    # 4.5 Show dependencies
+    # 4.5 Validate dependencies
     if manifest.dependencies.python:
-        _print_info(f"Python dependencies: {', '.join(manifest.dependencies.python)}")
+        from .dependencies import get_missing_packages
+
+        deps = manifest.dependencies.python
+        missing = get_missing_packages(deps)
+
+        if missing:
+            _print_warning(f"Missing packages: {', '.join(missing)}")
+            _print_info(f"Run: pip install {' '.join(missing)}")
+            warnings.append(f"Missing dependencies: {', '.join(missing)}")
+        else:
+            _print_success(f"All dependencies installed: {', '.join(deps)}")
 
     # 4.6 Show modes
     if manifest.modes:

@@ -428,6 +428,58 @@ async def run(self) -> RunResult:
 
 ---
 
+## 의존성 관리
+
+SDK에서 제공하는 의존성 자동 설치 기능입니다.
+
+### manifest.yaml에 의존성 정의
+
+```yaml
+dependencies:
+  python:
+    - pyserial>=3.5
+    - numpy>=1.20.0
+```
+
+### 런타임 자동 설치
+
+```python
+from station_service_sdk import ensure_package, ensure_dependencies
+
+# 단일 패키지
+ensure_package("pyserial")
+import serial
+
+# 여러 패키지
+results = ensure_dependencies(["pyserial", "numpy"])
+if all(results.values()):
+    import serial
+    import numpy
+```
+
+### 검증만 (설치 없이)
+
+```python
+from station_service_sdk import is_installed, get_missing_packages
+
+if is_installed("pyserial"):
+    import serial
+
+missing = get_missing_packages(["pyserial", "numpy"])
+if missing:
+    print(f"Missing: {missing}")
+```
+
+### CLI 검증
+
+```bash
+station-sdk validate manifest.yaml
+# 출력: ✓ All dependencies installed: pyserial>=3.5, numpy>=1.20.0
+# 또는: ⚠ Missing packages: numpy
+```
+
+---
+
 ## 체크리스트
 
 ### 필수
@@ -445,3 +497,31 @@ async def run(self) -> RunResult:
 - [ ] `check_abort()` 호출로 중단 요청 처리
 - [ ] manifest.yaml에 setup/teardown 스텝 정의 (`lifecycle: true`)
 - [ ] `stop_on_failure` 파라미터로 실패 시 동작 제어
+- [ ] `dependencies.python`에 필요한 패키지 명시
+
+---
+
+## Validation 검사 항목
+
+`station-sdk validate`가 검사하는 항목들:
+
+| 검사 항목 | 설명 |
+|-----------|------|
+| YAML 문법 | manifest.yaml 파싱 가능 여부 |
+| 스키마 검증 | Pydantic 모델 규격 준수 |
+| 엔트리포인트 | module.py 파일 및 class 존재 여부 |
+| **스텝 이름 매칭** | manifest steps ↔ `emit_step_start()` 일치 |
+| 하드웨어 드라이버 | driver 파일 존재 여부 |
+| **의존성 설치** | dependencies.python 패키지 설치 여부 |
+
+### 스텝 이름 검증 예시
+
+```
+✗ Step name mismatch detected:
+   → "sensor_test" emitted in sequence but not defined in manifest
+   → "init" defined in manifest but not used in sequence
+
+   Hint: manifest.yaml의 steps에 실제 emit하는 step 이름을 정의하세요.
+```
+
+**해결 방법**: manifest.yaml의 `steps[].name`과 코드의 `emit_step_start("name", ...)`이 일치해야 함
