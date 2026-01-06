@@ -10,9 +10,19 @@ import importlib.util
 import logging
 import subprocess
 import sys
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+# Python 3.11+ has tomllib in stdlib, fallback to tomli for older versions
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None  # type: ignore
 
 # Mapping of pip package names to their import names
 # Add entries here when the pip name differs from the import name
@@ -157,3 +167,116 @@ def get_missing_packages(packages: List[str]) -> List[str]:
         List of package names that are not installed
     """
     return [pkg for pkg in packages if not is_installed(pkg)]
+
+
+# =============================================================================
+# pyproject.toml Support
+# =============================================================================
+
+
+def parse_pyproject_dependencies(pyproject_path: Union[str, Path]) -> List[str]:
+    """
+    Parse dependencies from a pyproject.toml file.
+
+    Args:
+        pyproject_path: Path to pyproject.toml file
+
+    Returns:
+        List of dependency specifications
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If tomllib is not available
+    """
+    if tomllib is None:
+        raise ValueError(
+            "tomllib/tomli not available. Install tomli for Python < 3.11: "
+            "pip install tomli"
+        )
+
+    path = Path(pyproject_path)
+    if not path.exists():
+        raise FileNotFoundError(f"pyproject.toml not found: {path}")
+
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+
+    return data.get("project", {}).get("dependencies", [])
+
+
+def install_sequence_dependencies(
+    sequence_dir: Union[str, Path],
+    auto_install: bool = True,
+) -> List[str]:
+    """
+    Install dependencies from a sequence's pyproject.toml.
+
+    Args:
+        sequence_dir: Path to sequence directory containing pyproject.toml
+        auto_install: If True, install missing packages
+
+    Returns:
+        List of newly installed packages (empty if none installed)
+    """
+    sequence_path = Path(sequence_dir)
+    pyproject_path = sequence_path / "pyproject.toml"
+
+    if not pyproject_path.exists():
+        return []
+
+    try:
+        deps = parse_pyproject_dependencies(pyproject_path)
+    except (ValueError, Exception) as e:
+        logger.warning(f"Failed to parse {pyproject_path}: {e}")
+        return []
+
+    if not deps:
+        return []
+
+    missing = get_missing_packages(deps)
+    if not missing:
+        logger.debug(f"All dependencies installed for {sequence_path.name}")
+        return []
+
+    if not auto_install:
+        logger.warning(f"Missing dependencies for {sequence_path.name}: {missing}")
+        return []
+
+    logger.info(f"Installing dependencies for {sequence_path.name}: {missing}")
+
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet", *missing],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        logger.info(f"Successfully installed: {missing}")
+        return missing
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to install dependencies: {e}")
+        return []
+
+
+def get_pyproject_missing_packages(
+    sequence_dir: Union[str, Path],
+) -> List[str]:
+    """
+    Get missing packages from a sequence's pyproject.toml without installing.
+
+    Args:
+        sequence_dir: Path to sequence directory containing pyproject.toml
+
+    Returns:
+        List of missing package specifications
+    """
+    sequence_path = Path(sequence_dir)
+    pyproject_path = sequence_path / "pyproject.toml"
+
+    if not pyproject_path.exists():
+        return []
+
+    try:
+        deps = parse_pyproject_dependencies(pyproject_path)
+        return get_missing_packages(deps)
+    except Exception:
+        return []

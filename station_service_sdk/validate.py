@@ -344,7 +344,7 @@ def validate_manifest(
                         f"Hardware driver not found: {hw.driver} (expected at {driver_file})"
                     )
 
-    # 4.5 Validate dependencies
+    # 4.5 Validate dependencies (manifest.yaml)
     if manifest.dependencies.python:
         from .dependencies import get_missing_packages
 
@@ -352,11 +352,33 @@ def validate_manifest(
         missing = get_missing_packages(deps)
 
         if missing:
-            _print_warning(f"Missing packages: {', '.join(missing)}")
+            _print_warning(f"Missing packages (manifest): {', '.join(missing)}")
             _print_info(f"Run: pip install {' '.join(missing)}")
             warnings.append(f"Missing dependencies: {', '.join(missing)}")
         else:
-            _print_success(f"All dependencies installed: {', '.join(deps)}")
+            _print_success(f"All manifest dependencies installed: {', '.join(deps)}")
+
+    # 4.5.1 Validate dependencies (pyproject.toml)
+    pyproject_path = manifest_path.parent / "pyproject.toml"
+    if pyproject_path.exists():
+        from .dependencies import parse_pyproject_dependencies, get_missing_packages
+
+        try:
+            pyproject_deps = parse_pyproject_dependencies(pyproject_path)
+            if pyproject_deps:
+                missing = get_missing_packages(pyproject_deps)
+                if missing:
+                    _print_warning(f"Missing packages (pyproject.toml): {', '.join(missing)}")
+                    _print_info(f"Run: pip install {' '.join(missing)}")
+                    warnings.append(f"Missing pyproject.toml dependencies: {', '.join(missing)}")
+                else:
+                    _print_success(f"All pyproject.toml dependencies installed: {', '.join(pyproject_deps)}")
+        except ValueError as e:
+            _print_warning(f"Cannot parse pyproject.toml: {e}")
+        except Exception as e:
+            _print_warning(f"Error reading pyproject.toml: {e}")
+    else:
+        _print_info("No pyproject.toml found (optional)")
 
     # 4.6 Show modes
     if manifest.modes:

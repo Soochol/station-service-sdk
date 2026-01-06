@@ -171,6 +171,9 @@ from .dependencies import (
     is_installed,
     check_dependencies,
     get_missing_packages,
+    parse_pyproject_dependencies,
+    install_sequence_dependencies,
+    get_pyproject_missing_packages,
 )
 
 # Decorators (legacy pattern support)
@@ -310,4 +313,7 @@ __all__ = [
     "is_installed",
     "check_dependencies",
     "get_missing_packages",
+    "parse_pyproject_dependencies",
+    "install_sequence_dependencies",
+    "get_pyproject_missing_packages",
 ]

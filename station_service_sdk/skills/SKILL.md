@@ -430,9 +430,29 @@ async def run(self) -> RunResult:
 
 ## 의존성 관리
 
-SDK에서 제공하는 의존성 자동 설치 기능입니다.
+SDK에서 제공하는 의존성 관리 기능입니다.
 
-### manifest.yaml에 의존성 정의
+### pyproject.toml 방식 (권장)
+
+시퀀스 디렉토리에 `pyproject.toml` 파일을 생성하면 Station이 자동으로 의존성을 설치합니다.
+
+```toml
+# sequences/my_sequence/pyproject.toml
+[project]
+name = "my-sequence"
+version = "1.0.0"
+dependencies = [
+    "pyserial>=3.5,<4.0",
+    "numpy>=1.20.0",
+]
+```
+
+**장점:**
+- Python 표준 포맷
+- Station이 시퀀스 로드 시 자동 설치
+- `pip install -e .`로 개발환경 설정 가능
+
+### manifest.yaml 방식
 
 ```yaml
 dependencies:
@@ -441,12 +461,18 @@ dependencies:
     - numpy>=1.20.0
 ```
 
-### 런타임 자동 설치
+### SDK 함수 사용
 
 ```python
-from station_service_sdk import ensure_package, ensure_dependencies
+from station_service_sdk import (
+    ensure_package,
+    ensure_dependencies,
+    is_installed,
+    get_missing_packages,
+    install_sequence_dependencies,  # pyproject.toml 기반
+)
 
-# 단일 패키지
+# 단일 패키지 확인 및 설치
 ensure_package("pyserial")
 import serial
 
@@ -455,27 +481,23 @@ results = ensure_dependencies(["pyserial", "numpy"])
 if all(results.values()):
     import serial
     import numpy
-```
 
-### 검증만 (설치 없이)
-
-```python
-from station_service_sdk import is_installed, get_missing_packages
-
-if is_installed("pyserial"):
-    import serial
-
-missing = get_missing_packages(["pyserial", "numpy"])
-if missing:
-    print(f"Missing: {missing}")
+# pyproject.toml에서 의존성 설치
+from pathlib import Path
+installed = install_sequence_dependencies(Path("sequences/my_sequence"))
 ```
 
 ### CLI 검증
 
 ```bash
 station-sdk validate manifest.yaml
-# 출력: ✓ All dependencies installed: pyserial>=3.5, numpy>=1.20.0
-# 또는: ⚠ Missing packages: numpy
+
+# 출력 예시:
+# ✓ All manifest dependencies installed: pyserial>=3.5
+# ✓ All pyproject.toml dependencies installed: pyserial>=3.5,<4.0
+# 또는:
+# ⚠ Missing packages (pyproject.toml): numpy
+# ℹ Run: pip install numpy
 ```
 
 ---
@@ -497,7 +519,8 @@ station-sdk validate manifest.yaml
 - [ ] `check_abort()` 호출로 중단 요청 처리
 - [ ] manifest.yaml에 setup/teardown 스텝 정의 (`lifecycle: true`)
 - [ ] `stop_on_failure` 파라미터로 실패 시 동작 제어
-- [ ] `dependencies.python`에 필요한 패키지 명시
+- [ ] **`pyproject.toml` 작성하여 의존성 정의** (권장)
+- [ ] `dependencies.python`에 필요한 패키지 명시 (manifest.yaml)
 
 ---
 
@@ -512,7 +535,8 @@ station-sdk validate manifest.yaml
 | 엔트리포인트 | module.py 파일 및 class 존재 여부 |
 | **스텝 이름 매칭** | manifest steps ↔ `emit_step_start()` 일치 |
 | 하드웨어 드라이버 | driver 파일 존재 여부 |
-| **의존성 설치** | dependencies.python 패키지 설치 여부 |
+| **의존성 설치 (manifest)** | dependencies.python 패키지 설치 여부 |
+| **의존성 설치 (pyproject.toml)** | pyproject.toml의 dependencies 설치 여부 |
 
 ### 스텝 이름 검증 예시
 
@@ -525,3 +549,19 @@ station-sdk validate manifest.yaml
 ```
 
 **해결 방법**: manifest.yaml의 `steps[].name`과 코드의 `emit_step_start("name", ...)`이 일치해야 함
+
+### pyproject.toml 예시
+
+```toml
+# sequences/my_sequence/pyproject.toml
+[project]
+name = "my-sequence"
+version = "1.0.0"
+description = "My test sequence"
+requires-python = ">=3.10"
+dependencies = [
+    "pyserial>=3.5,<4.0",
+]
+```
+
+Station이 시퀀스를 로드할 때 자동으로 누락된 패키지를 설치합니다.
