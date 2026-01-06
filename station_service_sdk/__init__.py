@@ -15,6 +15,17 @@ This SDK provides:
 - Plugin system for extensibility
 - Testing utilities: mocks, fixtures, assertions
 
+Package Structure:
+    station_service_sdk/
+    ├── core/           # Core components (SequenceBase, Context, Protocol, Exceptions)
+    ├── execution/      # Execution components (Loader, Registry, Simulator, Manual)
+    ├── hardware/       # Hardware integration (Connection Pool, Retry, Health)
+    ├── testing/        # Testing utilities (Mocks, Fixtures, Assertions)
+    ├── observability/  # Observability (Logging, Tracing, Metrics)
+    ├── plugins/        # Plugin system (Manager, Protocol Adapters)
+    ├── cli/            # CLI tools (new, validate, run, debug, lint, doctor)
+    └── compat/         # Backward compatibility (Decorators, Dependencies)
+
 Example:
     from station_service_sdk import SequenceBase, RunResult
 
@@ -48,13 +59,16 @@ CLI Usage:
 
 __version__ = "2.0.0"  # Major version bump for enhanced SDK
 
-# Core
-from .base import SequenceBase, StepResult
-from .context import ExecutionContext, Measurement
-from .protocol import MessageType, OutputProtocol
+# =============================================================================
+# Core Module
+# =============================================================================
+from station_service_sdk.core.base import SequenceBase, StepResult
+from station_service_sdk.core.context import ExecutionContext, Measurement
+from station_service_sdk.core.protocol import MessageType, OutputProtocol
+from station_service_sdk.core.interfaces import OutputStrategy, LifecycleHook, CompositeHook
 
 # Types (TypedDict definitions and type aliases)
-from .sdk_types import (
+from station_service_sdk.core.sdk_types import (
     RunResult,
     ExecutionResult,
     MeasurementDict,
@@ -67,17 +81,14 @@ from .sdk_types import (
     SimulationStatus,
     InputType,
 )
-from .types import (
+from station_service_sdk.core.types import (
     SimulationResult,
     StepMeta,
     StepInfo,
 )
 
-# Interfaces (for extensibility)
-from .interfaces import OutputStrategy, LifecycleHook, CompositeHook
-
 # Exceptions
-from .exceptions import (
+from station_service_sdk.core.exceptions import (
     # Base
     SequenceError,
     # Lifecycle
@@ -109,7 +120,7 @@ from .exceptions import (
 )
 
 # Manifest models
-from .manifest import (
+from station_service_sdk.core.manifest import (
     ParameterType,
     ConfigFieldSchema,
     HardwareDefinition,
@@ -126,46 +137,36 @@ from .manifest import (
     SequenceManifest,
 )
 
-# Registry
-from .registry import (
+# =============================================================================
+# Execution Module
+# =============================================================================
+from station_service_sdk.execution.registry import (
     SequenceRegistry,
     register_sequence,
     get_sequence,
     list_sequences,
     discover_sequences,
 )
-
-# Loader
-from .loader import SequenceLoader
-
-# Helpers
-from .helpers import (
+from station_service_sdk.execution.loader import SequenceLoader
+from station_service_sdk.execution.helpers import (
     collect_steps,
     collect_steps_from_manifest,
     collect_steps_from_class,
 )
-
-# Simulator
-from .simulator import SequenceSimulator, MockHardware
-
-# Interactive Simulator
-from .interactive import (
+from station_service_sdk.execution.simulator import SequenceSimulator, MockHardware
+from station_service_sdk.execution.interactive import (
     InteractiveSimulator,
     SimulationSession,
     SimulationSessionStatus,
     StepState,
     StepExecutionStatus,
 )
-
-# Driver Registry
-from .driver_registry import (
+from station_service_sdk.execution.driver_registry import (
     DriverRegistry,
     DriverLoadError,
     DriverConnectionError,
 )
-
-# Manual Sequence Executor
-from .manual_executor import (
+from station_service_sdk.execution.manual_executor import (
     ManualSequenceExecutor,
     ManualSession,
     ManualSessionStatus,
@@ -175,8 +176,10 @@ from .manual_executor import (
     CommandResult,
 )
 
-# Dependency management
-from .dependencies import (
+# =============================================================================
+# Compatibility Module (Legacy support)
+# =============================================================================
+from station_service_sdk.compat.dependencies import (
     ensure_package,
     ensure_dependencies,
     is_installed,
@@ -186,9 +189,7 @@ from .dependencies import (
     install_sequence_dependencies,
     get_pyproject_missing_packages,
 )
-
-# Decorators (legacy pattern support)
-from .decorators import (
+from station_service_sdk.compat.decorators import (
     sequence,
     step,
     parameter,
@@ -204,6 +205,9 @@ from .decorators import (
     collect_parameters_from_decorated_class,
 )
 
+# =============================================================================
+# Public API
+# =============================================================================
 __all__ = [
     # Version
     "__version__",
