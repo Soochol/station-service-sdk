@@ -3,13 +3,17 @@ Station Service SDK - Build test sequences for manufacturing automation.
 
 This SDK provides:
 - SequenceBase: Base class for all sequences
-- CLI argument handling
+- CLI tools for development, validation, and debugging
 - JSON Lines output protocol for Station Service communication
 - Execution context management
 - Manifest models for package configuration
 - Sequence package loader for discovery and loading
 - Simulation and interactive testing tools
 - Manual execution capabilities
+- Hardware connection pooling and retry mechanisms
+- Observability: structured logging, tracing, metrics
+- Plugin system for extensibility
+- Testing utilities: mocks, fixtures, assertions
 
 Example:
     from station_service_sdk import SequenceBase, RunResult
@@ -33,9 +37,16 @@ Example:
 
     if __name__ == "__main__":
         exit(MySequence.run_from_cli())
+
+CLI Usage:
+    station-sdk new my-sequence      # Create new sequence
+    station-sdk validate .           # Validate sequence package
+    station-sdk run . --dry-run      # Run in dry-run mode
+    station-sdk debug . --step-by-step  # Interactive debug
+    station-sdk doctor               # Diagnose environment
 """
 
-__version__ = "3.0.0"  # Major version bump for SDK consolidation
+__version__ = "2.0.0"  # Major version bump for enhanced SDK
 
 # Core
 from .base import SequenceBase, StepResult

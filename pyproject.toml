@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "station-service-sdk"
-version = "1.0.6"
+version = "2.0.0"
 description = "SDK for building test sequences for Station Service"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "F2X", email = "dev@f2x.com" }
 ]
@@ -18,20 +18,34 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "click>=8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+tracing = [
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+]
+metrics = [
+    "prometheus-client>=0.17",
+]
+all = [
+    "station-service-sdk[tracing,metrics]",
 ]
 
 [project.scripts]
@@ -46,21 +60,38 @@ Repository = "https://github.com/Soochol/station-service-sdk"
 packages = ["station_service_sdk"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
 check_untyped_defs = true
+strict = false
 
 [[tool.mypy.overrides]]
 module = "yaml"
 ignore_missing_imports = true
 
-[tool.pylint.messages_control]
-disable = [
-    "missing-docstring",
-    "too-few-public-methods",
-]
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
 
-[tool.pylint.format]
-max-line-length = 100
+[tool.ruff.isort]
+known-first-party = ["station_service_sdk"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["station_service_sdk"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
