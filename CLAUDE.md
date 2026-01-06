@@ -29,8 +29,23 @@ station-sdk validate manifest.yaml
 station-sdk validate --dir sequences/
 
 # Build and publish to PyPI
+rm -rf dist/
 python -m build
 twine upload dist/*
+```
+
+## PyPI Release Process
+
+1. **Update version** in `pyproject.toml`
+2. **Run tests**: `pytest`
+3. **Type check**: `mypy station_service_sdk/`
+4. **Build**: `rm -rf dist/ && python -m build`
+5. **Upload**: `twine upload dist/*`
+6. **Commit & push**: `git add . && git commit -m "chore: release vX.Y.Z" && git push`
+
+Current version can be checked with:
+```bash
+grep '^version' pyproject.toml
 ```
 
 ## Architecture
