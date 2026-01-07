@@ -15,8 +15,8 @@ from typing import Any, Dict, Generator, List, Optional, Type
 import yaml
 from pydantic import ValidationError as PydanticValidationError
 
-from .exceptions import ManifestError, PackageError
-from .manifest import HardwareDefinition, SequenceManifest
+from station_service_sdk.core.exceptions import ManifestError, PackageError
+from station_service_sdk.core.manifest import HardwareDefinition, SequenceManifest
 
 logger = logging.getLogger(__name__)
 

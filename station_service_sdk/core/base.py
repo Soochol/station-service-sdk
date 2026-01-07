@@ -50,12 +50,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .sequence_cli import CLIArgs, parse_args, print_error
+from station_service_sdk.compat.sequence_cli import CLIArgs, parse_args, print_error
 from .context import ExecutionContext, Measurement
 from .protocol import OutputProtocol
 from .exceptions import SequenceError, SetupError, AbortError
 from .interfaces import OutputStrategy, LifecycleHook, CompositeHook
 from .sdk_types import RunResult
+from .validators import (
+    validate_step_name,
+    validate_timeout,
+    validate_index_total,
+    validate_input_type,
+    validate_measurement_name,
+    validate_measurement_value,
+    validate_error_code,
+    validate_duration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -575,7 +585,14 @@ class SequenceBase(ABC):
         Note:
             The index and total are automatically adjusted to include
             setup (index 0) and teardown (last index) as lifecycle steps.
+
+        Raises:
+            ValidationError: If step_name, index, or total are invalid
         """
+        # Validate inputs
+        step_name = validate_step_name(step_name)
+        index, total = validate_index_total(index, total)
+
         # Capture run()'s total steps on first call
         if self._run_total_steps == 0:
             self._run_total_steps = total
@@ -644,7 +661,14 @@ class SequenceBase(ABC):
             measurements: Measurement data from step
             error: Error message if failed
             data: Additional result data
+
+        Raises:
+            ValidationError: If step_name or duration are invalid
         """
+        # Validate inputs
+        step_name = validate_step_name(step_name)
+        duration = validate_duration(duration)
+
         result = StepResult(
             name=step_name,
             index=index,
@@ -697,7 +721,14 @@ class SequenceBase(ABC):
             passed: Whether measurement passed limits (auto-calculated if None)
             min_value: Minimum acceptable value
             max_value: Maximum acceptable value
+
+        Raises:
+            ValidationError: If name or value are invalid
         """
+        # Validate inputs
+        name = validate_measurement_name(name)
+        value = validate_measurement_value(value)
+
         # Create standardized Measurement object
         measurement = Measurement(
             name=name,
@@ -739,10 +770,16 @@ class SequenceBase(ABC):
         Emit error event.
 
         Args:
-            code: Error code
+            code: Error code (UPPER_SNAKE_CASE)
             message: Error message
             recoverable: Whether error is recoverable
+
+        Raises:
+            ValidationError: If code format is invalid
         """
+        # Validate inputs
+        code = validate_error_code(code)
+
         self._output.error(
             code=code,
             message=message,
@@ -846,11 +883,17 @@ class SequenceBase(ABC):
 
         Args:
             prompt: Prompt message
-            timeout: Timeout in seconds
+            timeout: Timeout in seconds (must be positive, max 86400)
 
         Returns:
             True if confirmed, False otherwise
+
+        Raises:
+            ValidationError: If timeout is invalid
         """
+        # Validate inputs
+        timeout = validate_timeout(timeout)
+
         request_id = f"confirm_{id(prompt)}"
         self._output.input_request(
             request_id=request_id,
@@ -874,14 +917,21 @@ class SequenceBase(ABC):
 
         Args:
             prompt: Prompt message
-            input_type: Type of input (text, number, select)
+            input_type: Type of input (confirm, text, number, select)
             options: Options for select type
             default: Default value
-            timeout: Timeout in seconds
+            timeout: Timeout in seconds (must be positive, max 86400)
 
         Returns:
             User input value
+
+        Raises:
+            ValidationError: If input_type or timeout are invalid
         """
+        # Validate inputs
+        input_type = validate_input_type(input_type)
+        timeout = validate_timeout(timeout)
+
         request_id = f"input_{id(prompt)}"
         self._output.input_request(
             request_id=request_id,

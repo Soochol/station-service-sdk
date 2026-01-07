@@ -1,0 +1,15 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CLAUDE.md
+include pyproject.toml
+include py.typed
+
+recursive-include station_service_sdk *.py
+recursive-include station_service_sdk/skills *.md
+recursive-include tests *.py
+
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .git*

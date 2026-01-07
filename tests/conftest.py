@@ -1,7 +1,7 @@
 """Pytest fixtures for Station Service SDK tests."""
 
 import pytest
-from station_service_sdk.context import ExecutionContext, Measurement
+from station_service_sdk.core.context import ExecutionContext, Measurement
 
 
 @pytest.fixture

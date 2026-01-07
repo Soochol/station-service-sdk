@@ -1,0 +1,36 @@
+"""Re-export exceptions from core for backward compatibility."""
+from station_service_sdk.core.exceptions import (
+    SequenceError,
+    SetupError,
+    TeardownError,
+    StepError,
+    SequenceTimeoutError,
+    AbortError,
+    TestFailure,
+    TestSkipped,
+    HardwareError,
+    HardwareConnectionError,
+    CommunicationError,
+    PackageError,
+    ManifestError,
+    ValidationError,
+    DependencyError,
+)
+
+__all__ = [
+    "SequenceError",
+    "SetupError",
+    "TeardownError",
+    "StepError",
+    "SequenceTimeoutError",
+    "AbortError",
+    "TestFailure",
+    "TestSkipped",
+    "HardwareError",
+    "HardwareConnectionError",
+    "CommunicationError",
+    "PackageError",
+    "ManifestError",
+    "ValidationError",
+    "DependencyError",
+]

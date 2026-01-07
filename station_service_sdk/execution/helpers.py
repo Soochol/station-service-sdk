@@ -7,10 +7,10 @@ sequences and new SDK-based sequences.
 
 from typing import Any, Callable, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from .types import StepInfo, StepMeta
+from station_service_sdk.core.types import StepInfo, StepMeta
 
 if TYPE_CHECKING:
-    from .manifest import SequenceManifest
+    from station_service_sdk.core.manifest import SequenceManifest
 
 
 # Re-export for backward compatibility

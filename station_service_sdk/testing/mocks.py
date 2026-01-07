@@ -378,7 +378,7 @@ class CapturedOutput(OutputStrategy):
 
     def step_start(
         self,
-        name: str,
+        step_name: str,
         index: int,
         total: int,
         description: str = "",
@@ -386,7 +386,7 @@ class CapturedOutput(OutputStrategy):
         """Capture step start message."""
         self._capture(
             "STEP_START",
-            name=name,
+            step_name=step_name,
             index=index,
             total=total,
             description=description,
@@ -394,32 +394,35 @@ class CapturedOutput(OutputStrategy):
 
     def step_complete(
         self,
-        name: str,
+        step_name: str,
         index: int,
         passed: bool,
         duration: float,
         measurements: dict[str, Any] | None = None,
         error: str | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
         """Capture step complete message."""
         self._capture(
             "STEP_COMPLETE",
-            name=name,
+            step_name=step_name,
             index=index,
             passed=passed,
             duration=duration,
             measurements=measurements or {},
             error=error,
+            data=data or {},
         )
 
     def measurement(
         self,
         name: str,
-        value: float | int | str | bool,
+        value: float | int | str | bool | None,
         unit: str = "",
         passed: bool | None = None,
         min_value: float | None = None,
         max_value: float | None = None,
+        step_name: str | None = None,
     ) -> None:
         """Capture measurement message."""
         self._capture(
@@ -430,37 +433,40 @@ class CapturedOutput(OutputStrategy):
             passed=passed,
             min_value=min_value,
             max_value=max_value,
+            step_name=step_name,
         )
 
     def error(
         self,
         code: str,
         message: str,
+        step: str | None = None,
         recoverable: bool = False,
-        details: dict[str, Any] | None = None,
     ) -> None:
         """Capture error message."""
         self._capture(
             "ERROR",
             code=code,
             message=message,
+            step=step,
             recoverable=recoverable,
-            details=details or {},
         )
 
     def sequence_complete(
         self,
-        passed: bool,
+        overall_pass: bool,
         duration: float,
-        measurements: dict[str, Any] | None = None,
+        steps: list[dict[str, Any]],
+        measurements: dict[str, Any],
         error: str | None = None,
     ) -> None:
         """Capture sequence complete message."""
         self._capture(
             "SEQUENCE_COMPLETE",
-            passed=passed,
+            overall_pass=overall_pass,
             duration=duration,
-            measurements=measurements or {},
+            steps=steps,
+            measurements=measurements,
             error=error,
         )
 
@@ -468,8 +474,10 @@ class CapturedOutput(OutputStrategy):
         self,
         request_id: str,
         prompt: str,
-        input_type: str = "text",
+        input_type: str = "confirm",
         options: list[str] | None = None,
+        default: Any = None,
+        timeout: float | None = None,
     ) -> None:
         """Capture input request message."""
         self._capture(
@@ -478,11 +486,29 @@ class CapturedOutput(OutputStrategy):
             prompt=prompt,
             input_type=input_type,
             options=options,
+            default=default,
+            timeout=timeout,
         )
 
-    def status(self, status: str, **extra: Any) -> None:
+    def status(
+        self,
+        status: str,
+        progress: float = 0.0,
+        current_step: str | None = None,
+        message: str = "",
+    ) -> None:
         """Capture status message."""
-        self._capture("STATUS", status=status, **extra)
+        self._capture(
+            "STATUS",
+            status=status,
+            progress=progress,
+            current_step=current_step,
+            message=message,
+        )
+
+    def wait_for_input(self, request_id: str, timeout: float = 300) -> Any:
+        """Wait for user input response (mock returns None)."""
+        return None
 
     # Query methods for assertions
 
