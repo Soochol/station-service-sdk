@@ -92,6 +92,7 @@ class StepResult:
             "measurements": self.measurements,
             "data": self.data,
             "error": self.error,
+            "status": "completed" if self.passed else "failed",
         }
 
 
