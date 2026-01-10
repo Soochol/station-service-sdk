@@ -270,7 +270,13 @@ class InteractiveSimulator:
         """
         session = self._get_session(session_id)
 
-        if session.status not in (SimulationSessionStatus.CREATED, SimulationSessionStatus.READY):
+        # Allow re-initialization from CREATED, READY, or FAILED states
+        # This enables retry after setup failures without creating a new session
+        if session.status not in (
+            SimulationSessionStatus.CREATED,
+            SimulationSessionStatus.READY,
+            SimulationSessionStatus.FAILED,
+        ):
             raise ValueError(f"Session {session_id} is not in a valid state for initialization")
 
         try:

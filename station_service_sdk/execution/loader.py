@@ -351,11 +351,36 @@ class SequenceLoader:
                 if subdir.is_dir() and not subdir.name.startswith((".", "_")):
                     subpackage_name = f"{package_module_name}.{subdir.name}"
                     if subpackage_name not in sys.modules:
-                        subpackage = types.ModuleType(subpackage_name)
-                        subpackage.__path__ = [str(subdir)]
-                        subpackage.__package__ = subpackage_name
-                        sys.modules[subpackage_name] = subpackage
-                        logger.debug(f"Registered subpackage: {subpackage_name}")
+                        # Check if subpackage has __init__.py
+                        init_path = subdir / "__init__.py"
+                        if init_path.exists():
+                            # Load the actual __init__.py module to make its exports available
+                            subpackage_spec = importlib.util.spec_from_file_location(
+                                subpackage_name,
+                                init_path,
+                                submodule_search_locations=[str(subdir)],
+                            )
+                            if subpackage_spec and subpackage_spec.loader:
+                                subpackage = importlib.util.module_from_spec(subpackage_spec)
+                                subpackage.__path__ = [str(subdir)]
+                                subpackage.__package__ = subpackage_name
+                                sys.modules[subpackage_name] = subpackage
+                                subpackage_spec.loader.exec_module(subpackage)
+                                logger.debug(f"Loaded subpackage with __init__.py: {subpackage_name}")
+                            else:
+                                # Fallback to empty module if spec creation fails
+                                subpackage = types.ModuleType(subpackage_name)
+                                subpackage.__path__ = [str(subdir)]
+                                subpackage.__package__ = subpackage_name
+                                sys.modules[subpackage_name] = subpackage
+                                logger.debug(f"Registered subpackage (no spec): {subpackage_name}")
+                        else:
+                            # No __init__.py, create empty module for namespace package
+                            subpackage = types.ModuleType(subpackage_name)
+                            subpackage.__path__ = [str(subdir)]
+                            subpackage.__package__ = subpackage_name
+                            sys.modules[subpackage_name] = subpackage
+                            logger.debug(f"Registered subpackage: {subpackage_name}")
 
             # Set module's __package__ for relative imports
             module.__package__ = package_module_name
